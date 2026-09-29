@@ -156,11 +156,19 @@ def intersect_aabb(
         t_min, t_max - two tensors of shapes N representing distance of intersection from the origin.
     """
 
-    tx_min = (aabb[:3] - origins) / directions
-    tx_max = (aabb[3:] - origins) / directions
+    # A ray parallel to a slab imposes no bound if its origin lies inside it.
+    # Use a safe divisor first: masking a 0/0 afterward also corrupts gradients.
+    parallel = directions == 0
+    safe_directions = torch.where(parallel, 1.0, directions)
+    tx_min = (aabb[:3] - origins) / safe_directions
+    tx_max = (aabb[3:] - origins) / safe_directions
 
     t_min = torch.stack((tx_min, tx_max)).amin(dim=0)
     t_max = torch.stack((tx_min, tx_max)).amax(dim=0)
+    t_min = torch.where(parallel, -torch.inf, t_min)
+    t_max = torch.where(parallel, torch.inf, t_max)
+    outside = (origins < aabb[:3]) | (origins > aabb[3:])
+    parallel_miss = torch.any(parallel & outside, dim=-1)
 
     t_min = t_min.amax(dim=-1)
     t_max = t_max.amin(dim=-1)
@@ -168,7 +176,7 @@ def intersect_aabb(
     t_min = torch.clamp(t_min, min=0, max=max_bound)
     t_max = torch.clamp(t_max, min=0, max=max_bound)
 
-    cond = t_max <= t_min
+    cond = (t_max <= t_min) | parallel_miss
     t_min = torch.where(cond, invalid_value, t_min)
     t_max = torch.where(cond, invalid_value, t_max)
 
