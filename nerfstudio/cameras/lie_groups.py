@@ -34,11 +34,11 @@ def exp_map_SO3xR3(tangent_vector: Float[Tensor, "b 6"]) -> Float[Tensor, "b 3 4
     """
     # code for SO3 map grabbed from pytorch3d and stripped down to bare-bones
     log_rot = tangent_vector[:, 3:]
-    nrms = (log_rot * log_rot).sum(1)
-    rot_angles = torch.clamp(nrms, 1e-4).sqrt()
-    rot_angles_inv = 1.0 / rot_angles
-    fac1 = rot_angles_inv * rot_angles.sin()
-    fac2 = rot_angles_inv * rot_angles_inv * (1.0 - rot_angles.cos())
+    rot_angles = torch.linalg.vector_norm(log_rot, dim=-1)
+    # sinc uses its analytic limit at zero. The half-angle identity avoids
+    # cancellation in (1 - cos(theta)) / theta**2 without clamping theta.
+    fac1 = torch.sinc(rot_angles / torch.pi)
+    fac2 = 0.5 * torch.sinc(rot_angles / (2 * torch.pi)).square()
     skews = torch.zeros((log_rot.shape[0], 3, 3), dtype=log_rot.dtype, device=log_rot.device)
     skews[:, 0, 1] = -log_rot[:, 2]
     skews[:, 0, 2] = log_rot[:, 1]
