@@ -40,3 +40,14 @@ def test_small_rotation_exponential_and_gradient(angle):
     R = actual[:, :3, :3]
     torch.testing.assert_close(R.transpose(-1, -2) @ R, torch.eye(3, dtype=R.dtype)[None], atol=1e-12, rtol=1e-12)
     torch.testing.assert_close(torch.linalg.det(R), torch.ones(1, dtype=R.dtype), atol=1e-12, rtol=1e-12)
+
+
+@pytest.mark.parametrize("angle", [0.0, 1e-8, 0.001, 0.1])
+def test_small_rotation_hessian_matches_matrix_exponential(angle):
+    tangent = torch.tensor([0.2, -0.1, 0.3, angle, 0.0, 0.0], dtype=torch.float64, requires_grad=True)
+    weights = torch.arange(12, dtype=torch.float64).reshape(1, 3, 4)
+    actual = torch.autograd.functional.hessian(lambda x: (exp_map_SO3xR3(x[None]) * weights).sum(), tangent)
+    expected = torch.autograd.functional.hessian(lambda x: (reference(x[None]) * weights).sum(), tangent)
+    assert torch.isfinite(actual).all()
+    torch.testing.assert_close(actual, expected, atol=1e-10, rtol=1e-10)
+    assert torch.autograd.gradgradcheck(exp_map_SO3xR3, (tangent[None],), atol=1e-6, rtol=1e-5)
