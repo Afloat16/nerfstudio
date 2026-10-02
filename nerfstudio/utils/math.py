@@ -156,11 +156,18 @@ def intersect_aabb(
         t_min, t_max - two tensors of shapes N representing distance of intersection from the origin.
     """
 
-    tx_min = (aabb[:3] - origins) / directions
-    tx_max = (aabb[3:] - origins) / directions
+    parallel = directions == 0
+    safe_directions = torch.where(parallel, torch.ones_like(directions), directions)
+    tx_min = (aabb[:3] - origins) / safe_directions
+    tx_max = (aabb[3:] - origins) / safe_directions
 
-    t_min = torch.stack((tx_min, tx_max)).amin(dim=0)
-    t_max = torch.stack((tx_min, tx_max)).amax(dim=0)
+    t_min = torch.minimum(tx_min, tx_max)
+    t_max = torch.maximum(tx_min, tx_max)
+    # A parallel ray imposes no interval restriction inside the slab, and
+    # cannot intersect the box outside it. This also avoids 0 / 0 on faces.
+    inside = (origins >= aabb[:3]) & (origins <= aabb[3:])
+    t_min = torch.where(parallel, torch.where(inside, -torch.inf, torch.inf), t_min)
+    t_max = torch.where(parallel, torch.where(inside, torch.inf, -torch.inf), t_max)
 
     t_min = t_min.amax(dim=-1)
     t_max = t_max.amin(dim=-1)
