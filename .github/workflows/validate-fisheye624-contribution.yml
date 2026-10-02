@@ -27,10 +27,14 @@ jobs:
         with:
           python-version: '3.11.13'
           cache: pip
+      - name: Install system Open3D runtime
+        run: sudo apt-get update && sudo apt-get install --yes libegl1
       - name: Install project development and documentation dependencies
         run: |
           python -m pip install --upgrade pip uv
-          uv pip install --system --upgrade -e '.[dev,docs]'
+          uv pip install --system --upgrade -e '.[dev,docs]' 'numpy==1.26.4' 'setuptools<81' 'open3d==0.18.0'
+      - name: Check resolved dependency consistency
+        run: uv pip check --system
       - name: Check license headers
         run: bash nerfstudio/scripts/licensing/license_headers.sh --check
       - name: Check notebook cell metadata
